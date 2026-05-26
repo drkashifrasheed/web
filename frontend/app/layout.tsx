@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
@@ -6,7 +6,7 @@ import { Providers } from '@/components/providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const viewport = {
+export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -15,21 +15,30 @@ export const viewport = {
 }
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  ),
   title: 'Dr Mahar Kashif Rasheed - Premium Healthcare & Telemedicine',
-  description: 'Book appointments with Dr Mahar Kashif Rasheed. Premium healthcare services with video consultations, chat support, and expert medical care.',
-  keywords: ['healthcare', 'doctor', 'telemedicine', 'appointments', 'medical', 'Dr Mahar Kashif Rasheed'],
+  description:
+    'Book appointments with Dr Mahar Kashif Rasheed. Premium healthcare services with video consultations, chat support, and expert medical care.',
+  keywords: [
+    'healthcare',
+    'doctor',
+    'telemedicine',
+    'appointments',
+    'medical',
+    'Dr Mahar Kashif Rasheed',
+  ],
   authors: [{ name: 'Dr Mahar Kashif Rasheed' }],
   icons: {
-    icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-    ],
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     shortcut: '/favicon.svg',
     apple: '/favicon.svg',
   },
   openGraph: {
     title: 'Dr Mahar Kashif Rasheed - Premium Healthcare',
-    description: 'Book appointments with Dr Mahar Kashif Rasheed. Premium healthcare services.',
+    description:
+      'Book appointments with Dr Mahar Kashif Rasheed. Premium healthcare services.',
     type: 'website',
   },
 }
@@ -44,6 +53,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           {children}
+
           <Toaster
             position="top-center"
             containerClassName="!top-[calc(4rem+env(safe-area-inset-top))] sm:!top-4"
