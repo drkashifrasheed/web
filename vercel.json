@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
+    },
+    {
       "src": "backend/server.js",
       "use": "@vercel/node"
     }
@@ -21,7 +25,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "backend/server.js"
+      "dest": "frontend/$1"
     }
   ],
   "env": {
