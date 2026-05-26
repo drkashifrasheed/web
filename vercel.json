@@ -10,38 +10,18 @@
       "use": "@vercel/node"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/server.js"
+      "source": "/api/(.*)",
+      "destination": "backend/server.js"
     },
     {
-      "src": "/socket.io/(.*)",
-      "dest": "backend/server.js"
+      "source": "/socket.io/(.*)",
+      "destination": "backend/server.js"
     },
     {
-      "src": "/uploads/(.*)",
-      "dest": "backend/server.js"
-    },
-    {
-      "src": "/_next/(.*)",
-      "dest": "frontend/_next/$1"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "frontend/static/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "frontend/favicon.ico"
-    },
-    {
-      "src": "/favicon.svg",
-      "dest": "frontend/favicon.svg"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend"
+      "source": "/uploads/(.*)",
+      "destination": "backend/server.js"
     }
   ],
   "env": {
