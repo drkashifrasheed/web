@@ -10,27 +10,6 @@ const nextConfig = {
       },
     ],
   },
-  trailingSlash: true,
-  // Disable static export - use SSR for all pages
-  output: 'standalone',
-  async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:5000/api/:path*',
-        },
-        {
-          source: '/socket.io/:path*',
-          destination: 'http://localhost:5000/socket.io/:path*',
-        },
-        {
-          source: '/uploads/:path*',
-          destination: 'http://localhost:5000/uploads/:path*',
-        },
-      ],
-    }
-  },
 }
 
 module.exports = nextConfig
