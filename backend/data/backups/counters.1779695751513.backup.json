@@ -1,0 +1,14 @@
+[
+  {
+    "collection": "users",
+    "value": 3
+  },
+  {
+    "collection": "bookings",
+    "value": 1
+  },
+  {
+    "collection": "notifications",
+    "value": 1
+  }
+]
