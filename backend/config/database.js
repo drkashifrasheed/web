@@ -2,12 +2,21 @@
  * File-based Database Configuration
  * Simple JSON file storage for persistent data without MongoDB
  * Data is saved to backend/data/db/ directory and persists across server restarts
+ * On Vercel, uses /tmp for temporary storage (data persists during function execution)
  */
 
 const fs = require('fs');
 const path = require('path');
 
 let isConnected = true; // Always true for file-based storage
+
+// Get data directory - use /tmp on Vercel, local data dir otherwise
+const getDataDir = () => {
+  if (process.env.VERCEL) {
+    return '/tmp/data/db';
+  }
+  return path.join(__dirname, '..', 'data', 'db');
+};
 
 // Check if database is available (always true for file-based)
 const isDatabaseConnected = () => {
@@ -17,7 +26,7 @@ const isDatabaseConnected = () => {
 // Initialize database - creates data directories and files
 const connectDB = async () => {
   try {
-    const dbDir = path.join(__dirname, '..', 'data', 'db');
+    const dbDir = getDataDir();
     
     // Ensure directory exists
     if (!fs.existsSync(dbDir)) {
@@ -42,5 +51,6 @@ const connectDB = async () => {
 
 module.exports = {
   connectDB,
-  isDatabaseConnected
+  isDatabaseConnected,
+  getDataDir
 };
