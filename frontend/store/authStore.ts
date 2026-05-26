@@ -18,26 +18,46 @@ interface OTPState {
 
 interface AuthStore extends AuthState {
   otpState: OTPState
-  
+
   // Legacy methods
   login: (email: string, password: string) => Promise<void>
   register: (fullName: string, email: string, password: string, phoneNumber?: string) => Promise<void>
-  
+
   // OTP methods
   sendLoginOTP: (email: string, password: string) => Promise<boolean>
   verifyLoginOTP: (otp: string) => Promise<User>
   resendLoginOTP: () => Promise<void>
-  
+
   sendRegisterOTP: (fullName: string, email: string, password: string, phoneNumber?: string) => Promise<boolean>
   verifyRegisterOTP: (otp: string) => Promise<void>
   resendRegisterOTP: () => Promise<void>
-  
+
   clearOTPState: () => void
-  
+
   logout: () => void
   loadUser: () => Promise<void>
   updateUser: (user: User) => void
   setLoading: (loading: boolean) => void
+}
+
+// Safe localStorage access
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(key)
+    }
+    return null
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, value)
+    }
+  },
+  removeItem: (key: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key)
+    }
+  }
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -46,7 +66,7 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
-      isLoading: true,
+      isLoading: false, // Start as false for SSR safety
       otpState: {
         email: '',
         otpType: null,
@@ -59,8 +79,8 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await authApi.login({ email, password })
           const { user, token } = response.data.data
-          
-          localStorage.setItem('token', token)
+
+          safeLocalStorage.setItem('token', token)
           set({ user, token, isAuthenticated: true, isLoading: false })
           toast.success('Login successful!')
         } catch (error: any) {
@@ -74,7 +94,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await authApi.sendLoginOTP({ email, password })
           const { email: responseEmail, expiresIn, requiresOTP } = response.data.data
-          
+
           if (requiresOTP) {
             set({
               otpState: {
@@ -106,13 +126,13 @@ export const useAuthStore = create<AuthStore>()(
             email: otpState.email,
             otp
           })
-          
+
           const { user, token } = response.data.data
-          
+
           console.log('AuthStore - Saving token to localStorage')
-          localStorage.setItem('token', token)
-          console.log('AuthStore - Token saved, verifying:', localStorage.getItem('token') ? 'exists' : 'missing')
-          
+          safeLocalStorage.setItem('token', token)
+          console.log('AuthStore - Token saved, verifying:', safeLocalStorage.getItem('token') ? 'exists' : 'missing')
+
           set({
             user,
             token,
@@ -126,7 +146,7 @@ export const useAuthStore = create<AuthStore>()(
             }
           })
           toast.success('Login successful!')
-          
+
           // Return user data for immediate use
           return user
         } catch (error: any) {
@@ -145,7 +165,7 @@ export const useAuthStore = create<AuthStore>()(
 
           const response = await authApi.resendLoginOTP({ email: otpState.email })
           const { expiresIn } = response.data.data
-          
+
           set(state => ({
             otpState: {
               ...state.otpState,
@@ -164,8 +184,8 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await authApi.register({ fullName, email, password, phoneNumber })
           const { user, token } = response.data.data
-          
-          localStorage.setItem('token', token)
+
+          safeLocalStorage.setItem('token', token)
           set({ user, token, isAuthenticated: true, isLoading: false })
           toast.success('Registration successful!')
         } catch (error: any) {
@@ -181,7 +201,7 @@ export const useAuthStore = create<AuthStore>()(
           const response = await authApi.sendVerificationOTP({ fullName, email, password, phoneNumber })
           console.log('OTP response:', response.data)
           const { email: responseEmail, expiresIn } = response.data.data
-          
+
           set({
             otpState: {
               email: responseEmail,
@@ -213,14 +233,14 @@ export const useAuthStore = create<AuthStore>()(
             email: otpState.email,
             otp
           })
-          
+
           const { user, token } = response.data.data
-          
-          localStorage.setItem('token', token)
-          set({ 
-            user, 
-            token, 
-            isAuthenticated: true, 
+
+          safeLocalStorage.setItem('token', token)
+          set({
+            user,
+            token,
+            isAuthenticated: true,
             isLoading: false,
             otpState: {
               email: '',
@@ -246,7 +266,7 @@ export const useAuthStore = create<AuthStore>()(
 
           const response = await authApi.resendVerificationOTP({ email: otpState.email })
           const { expiresIn } = response.data.data
-          
+
           set(state => ({
             otpState: {
               ...state.otpState,
@@ -273,11 +293,11 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: () => {
-        localStorage.removeItem('token')
-        set({ 
-          user: null, 
-          token: null, 
-          isAuthenticated: false, 
+        safeLocalStorage.removeItem('token')
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
           isLoading: false,
           otpState: {
             email: '',
@@ -290,9 +310,15 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       loadUser: async () => {
-        const token = localStorage.getItem('token')
+        // Only run on client side
+        if (typeof window === 'undefined') {
+          set({ isLoading: false, isAuthenticated: false })
+          return
+        }
+
+        const token = safeLocalStorage.getItem('token')
         console.log('AuthStore loadUser - Token:', token ? 'exists' : 'missing')
-        
+
         if (!token) {
           set({ isLoading: false, isAuthenticated: false })
           return
@@ -313,7 +339,7 @@ export const useAuthStore = create<AuthStore>()(
           const status = error.response?.status
           // Keep session on temporary DB/server errors; only clear on auth failure
           if (status === 401 || status === 403) {
-            localStorage.removeItem('token')
+            safeLocalStorage.removeItem('token')
             set({ user: null, token: null, isAuthenticated: false, isLoading: false })
           } else {
             const persisted = get()
@@ -338,11 +364,11 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ 
+      partialize: (state) => ({
         token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
-        otpState: state.otpState 
+        otpState: state.otpState
       }),
       merge: (persisted, current) => {
         const saved = persisted as Partial<AuthStore> | undefined
@@ -351,7 +377,7 @@ export const useAuthStore = create<AuthStore>()(
           ...current,
           ...saved,
           isAuthenticated: saved?.isAuthenticated ?? !!token,
-          isLoading: !!token
+          isLoading: false // Always false after merge for SSR safety
         }
       }
     }
