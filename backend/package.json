@@ -1,0 +1,10 @@
+{
+  "name": "dr-mahar-kashif-rasheed-backend",
+  "version": "1.0.0",
+  "description": "Backend API - uses root node_modules",
+  "main": "server.js",
+  "scripts": {
+    "dev": "cd .. && npm run dev:backend",
+    "start": "cd .. && npm run start"
+  }
+}
