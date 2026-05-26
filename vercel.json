@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "name": "dr-mahar-kashif-rasheed",
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/.next",
+  "framework": "nextjs",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "5000",
+    "CLIENT_URL": "https://web-ecru-seven-13.vercel.app",
+    "NEXT_PUBLIC_API_URL": "https://web-ecru-seven-13.vercel.app/api",
+    "NEXT_PUBLIC_SOCKET_URL": "https://web-ecru-seven-13.vercel.app",
+    "NEXT_PUBLIC_BASE_URL": "https://web-ecru-seven-13.vercel.app",
+    "NEXTAUTH_URL": "https://web-ecru-seven-13.vercel.app"
+  }
+}
