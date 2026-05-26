@@ -1,25 +1,46 @@
 /**
  * File-based database — data saves to backend/data/db/ (no MongoDB / .env required)
+ * On Vercel, uses /tmp for temporary storage
  * Features: Atomic writes, auto-backup, corruption protection, crash recovery
  */
 
 const fs = require('fs');
 const path = require('path');
+const { getDataDir } = require('../config/database');
 
-const DB_DIR = path.join(__dirname, '..', 'data', 'db');
-const BACKUP_DIR = path.join(__dirname, '..', 'data', 'backups');
+// Get dynamic DB_DIR based on environment
+const getDB_DIR = () => {
+  if (process.env.VERCEL) {
+    return '/tmp/data/db';
+  }
+  return path.join(__dirname, '..', 'data', 'db');
+};
 
-const COLLECTIONS = {
-  users: path.join(DB_DIR, 'users.json'),
-  bookings: path.join(DB_DIR, 'bookings.json'),
-  messages: path.join(DB_DIR, 'messages.json'),
-  notifications: path.join(DB_DIR, 'notifications.json'),
-  meetings: path.join(DB_DIR, 'meetings.json'),
-  counters: path.join(DB_DIR, 'counters.json')
+const getBACKUP_DIR = () => {
+  if (process.env.VERCEL) {
+    return '/tmp/data/backups';
+  }
+  return path.join(__dirname, '..', 'data', 'backups');
+};
+
+// Get collections with dynamic paths
+const getCOLLECTIONS = () => {
+  const DB_DIR = getDB_DIR();
+  return {
+    users: path.join(DB_DIR, 'users.json'),
+    bookings: path.join(DB_DIR, 'bookings.json'),
+    messages: path.join(DB_DIR, 'messages.json'),
+    notifications: path.join(DB_DIR, 'notifications.json'),
+    meetings: path.join(DB_DIR, 'meetings.json'),
+    counters: path.join(DB_DIR, 'counters.json')
+  };
 };
 
 // Ensure directories exist
 function ensureDirectories() {
+  const DB_DIR = getDB_DIR();
+  const BACKUP_DIR = getBACKUP_DIR();
+  
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
   }
@@ -33,6 +54,8 @@ ensureDirectories();
 // Create backup before write
 function createBackup(name) {
   try {
+    const COLLECTIONS = getCOLLECTIONS();
+    const BACKUP_DIR = getBACKUP_DIR();
     const filePath = COLLECTIONS[name];
     if (!fs.existsSync(filePath)) return;
     
@@ -101,64 +124,58 @@ function atomicWrite(filePath, data) {
     
     return true;
   } catch (error) {
-    // Cleanup temp file
-    if (fs.existsSync(tempPath)) {
-      try {
+    // Cleanup temp file on error
+    try {
+      if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
-      } catch (e) {}
+      }
+    } catch (e) {
+      // Ignore cleanup errors
     }
     throw error;
   }
 }
 
-// Recover from backup if main file is corrupted
-function recoverFromBackup(filePath) {
-  const backupPath = filePath + '.bak';
-  
-  if (fs.existsSync(backupPath)) {
-    try {
-      fs.copyFileSync(backupPath, filePath);
-      console.log(`Recovered ${path.basename(filePath)} from backup`);
-      return true;
-    } catch (error) {
-      console.error(`Failed to recover from backup:`, error.message);
-    }
-  }
-  return false;
-}
-
-function initCollection(name) {
-  const filePath = COLLECTIONS[name];
-  if (!fs.existsSync(filePath)) {
-    atomicWrite(filePath, []);
-  }
-}
-
-Object.keys(COLLECTIONS).forEach(initCollection);
-
+// Read collection - returns array of documents
 function readCollection(name) {
   try {
+    const COLLECTIONS = getCOLLECTIONS();
     const filePath = COLLECTIONS[name];
-    if (!fs.existsSync(filePath)) return [];
     
-    const content = fs.readFileSync(filePath, 'utf8');
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+    
+    const data = fs.readFileSync(filePath, 'utf8');
     
     // Handle empty file
-    if (!content.trim()) return [];
+    if (!data.trim()) {
+      return [];
+    }
     
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
     } catch (parseError) {
-      console.error(`Corrupted data in ${name}, attempting recovery...`);
-      
       // Try to recover from backup
-      if (recoverFromBackup(filePath)) {
-        const backupContent = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(backupContent);
+      const BACKUP_DIR = getBACKUP_DIR();
+      const backups = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.startsWith(name + '.') && f.endsWith('.backup.json'))
+        .sort()
+        .reverse();
+      
+      for (const backup of backups) {
+        try {
+          const backupData = fs.readFileSync(path.join(BACKUP_DIR, backup), 'utf8');
+          const parsed = JSON.parse(backupData);
+          console.log(`Recovered ${name} from backup: ${backup}`);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          continue;
+        }
       }
       
-      // If no backup, return empty array
-      console.error(`Could not recover ${name}, returning empty array`);
+      console.error(`Failed to parse ${name} and no valid backup found:`, parseError.message);
       return [];
     }
   } catch (error) {
@@ -167,186 +184,255 @@ function readCollection(name) {
   }
 }
 
+// Write collection - atomic write with backup
 function writeCollection(name, data) {
   try {
+    ensureDirectories();
+    const COLLECTIONS = getCOLLECTIONS();
+    const filePath = COLLECTIONS[name];
+    
     // Create backup before write
     createBackup(name);
     
     // Atomic write
-    atomicWrite(COLLECTIONS[name], data);
+    atomicWrite(filePath, data);
+    
     return true;
   } catch (error) {
     console.error(`Error writing ${name}:`, error.message);
-    return false;
+    throw error;
   }
 }
 
-function getNextId(collectionName) {
-  const counters = readCollection('counters');
-  let counter = counters.find((c) => c.collection === collectionName);
-  if (!counter) {
-    counter = { collection: collectionName, value: 0 };
-    counters.push(counter);
+// Query with filters and options
+function query(name, filters = {}, options = {}) {
+  let data = readCollection(name);
+  
+  // Apply filters
+  if (filters && Object.keys(filters).length > 0) {
+    data = data.filter(doc => {
+      return Object.entries(filters).every(([key, value]) => {
+        // Handle nested fields (e.g., 'user.id')
+        const keys = key.split('.');
+        let field = doc;
+        for (const k of keys) {
+          field = field?.[k];
+          if (field === undefined) return false;
+        }
+        
+        // Handle different comparison types
+        if (typeof value === 'object' && value !== null) {
+          if (value.$gt !== undefined) return field > value.$gt;
+          if (value.$gte !== undefined) return field >= value.$gte;
+          if (value.$lt !== undefined) return field < value.$lt;
+          if (value.$lte !== undefined) return field <= value.$lte;
+          if (value.$ne !== undefined) return field !== value.$ne;
+          if (value.$in !== undefined) return value.$in.includes(field);
+          if (value.$nin !== undefined) return !value.$nin.includes(field);
+          if (value.$regex !== undefined) {
+            const regex = new RegExp(value.$regex, value.$options || '');
+            return regex.test(field);
+          }
+        }
+        
+        return field === value;
+      });
+    });
   }
-  counter.value += 1;
-  writeCollection('counters', counters);
-  return String(counter.value);
+  
+  // Apply sorting
+  if (options.sort) {
+    const [sortField, sortOrder] = Object.entries(options.sort)[0] || ['_id', 1];
+    data.sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (sortOrder === -1) {
+        return bVal > aVal ? 1 : -1;
+      }
+      return aVal > bVal ? 1 : -1;
+    });
+  }
+  
+  // Apply pagination
+  if (options.skip) {
+    data = data.slice(options.skip);
+  }
+  if (options.limit) {
+    data = data.slice(0, options.limit);
+  }
+  
+  return data;
 }
 
-function matchField(item, key, value) {
-  if (key === '_id') {
-    return (
-      item._id === value ||
-      String(item._id) === String(value)
-    );
-  }
-
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if (value.$ne !== undefined) return item[key] !== value.$ne;
-    if (value.$gt !== undefined) return item[key] > value.$gt;
-    if (value.$gte !== undefined) return item[key] >= value.$gte;
-    if (value.$lt !== undefined) return item[key] < value.$lt;
-    if (value.$lte !== undefined) return item[key] <= value.$lte;
-    if (value.$in !== undefined) return value.$in.includes(item[key]);
-    if (value.$regex !== undefined) {
-      const flags = value.$options?.includes('i') ? 'i' : '';
-      return new RegExp(value.$regex, flags).test(String(item[key] || ''));
-    }
-  }
-
-  return item[key] === value;
+// Find one document
+function findOne(name, filters = {}) {
+  const results = query(name, filters, { limit: 1 });
+  return results[0] || null;
 }
 
-function matchesFilter(item, filter) {
-  if (!filter || Object.keys(filter).length === 0) return true;
-
-  if (filter.$or) {
-    return filter.$or.some((clause) => matchesFilter(item, clause));
+// Insert document
+function insert(name, doc) {
+  const data = readCollection(name);
+  
+  // Generate ID if not provided
+  if (!doc._id && !doc.id) {
+    doc._id = generateId();
   }
-
-  return Object.keys(filter).every((key) => {
-    if (key === '$or') return true;
-    return matchField(item, key, filter[key]);
-  });
+  
+  // Add timestamps
+  const now = new Date().toISOString();
+  doc.createdAt = doc.createdAt || now;
+  doc.updatedAt = now;
+  
+  data.push(doc);
+  writeCollection(name, data);
+  
+  return doc;
 }
 
-class FileCollection {
-  constructor(name) {
-    this.name = name;
-    initCollection(name);
+// Update documents
+function update(name, filters, updateData, options = {}) {
+  let data = readCollection(name);
+  let modifiedCount = 0;
+  
+  // Find matching documents
+  const matchingIndices = data.reduce((indices, doc, index) => {
+    const matches = Object.entries(filters).every(([key, value]) => {
+      const keys = key.split('.');
+      let field = doc;
+      for (const k of keys) {
+        field = field?.[k];
+        if (field === undefined) return false;
+      }
+      return field === value;
+    });
+    if (matches) indices.push(index);
+    return indices;
+  }, []);
+  
+  if (matchingIndices.length === 0) {
+    return { modifiedCount: 0, matchedCount: 0 };
   }
-
-  find(filter = {}) {
-    return readCollection(this.name).filter((item) => matchesFilter(item, filter));
-  }
-
-  findOne(filter = {}) {
-    return this.find(filter)[0] || null;
-  }
-
-  findById(id) {
-    return this.findOne({ _id: id });
-  }
-
-  insertOne(doc) {
-    const data = readCollection(this.name);
-    const newDoc = {
-      ...doc,
-      _id: doc._id ? String(doc._id) : getNextId(this.name),
-      createdAt: doc.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    data.push(newDoc);
-    writeCollection(this.name, data);
-    return newDoc;
-  }
-
-  insertMany(docs) {
-    return docs.map((doc) => this.insertOne(doc));
-  }
-
-  updateOne(filter, update) {
-    const data = readCollection(this.name);
-    const index = data.findIndex((item) => matchesFilter(item, filter));
-    if (index === -1) return { modifiedCount: 0 };
-
-    let updatedDoc = { ...data[index] };
-
-    if (update.$set) {
-      updatedDoc = { ...updatedDoc, ...update.$set };
-    } else if (!update.$push && !update.$pull) {
-      updatedDoc = { ...updatedDoc, ...update };
-    }
-
-    if (update.$push) {
-      Object.keys(update.$push).forEach((key) => {
-        if (!updatedDoc[key]) updatedDoc[key] = [];
-        updatedDoc[key].push(update.$push[key]);
+  
+  // Update matching documents
+  matchingIndices.forEach(index => {
+    const doc = data[index];
+    
+    if (updateData.$set) {
+      Object.entries(updateData.$set).forEach(([key, value]) => {
+        const keys = key.split('.');
+        if (keys.length === 1) {
+          doc[key] = value;
+        } else {
+          // Handle nested fields
+          let target = doc;
+          for (let i = 0; i < keys.length - 1; i++) {
+            if (!target[keys[i]]) target[keys[i]] = {};
+            target = target[keys[i]];
+          }
+          target[keys[keys.length - 1]] = value;
+        }
       });
     }
-
-    updatedDoc.updatedAt = new Date().toISOString();
-    data[index] = updatedDoc;
-    writeCollection(this.name, data);
-    return { modifiedCount: 1, doc: updatedDoc };
-  }
-
-  updateMany(filter, update) {
-    const data = readCollection(this.name);
-    let modifiedCount = 0;
-    data.forEach((item, index) => {
-      if (matchesFilter(item, filter)) {
-        let updatedDoc = { ...item };
-        if (update.$set) updatedDoc = { ...updatedDoc, ...update.$set };
-        else updatedDoc = { ...updatedDoc, ...update };
-        updatedDoc.updatedAt = new Date().toISOString();
-        data[index] = updatedDoc;
-        modifiedCount++;
-      }
-    });
-    if (modifiedCount > 0) writeCollection(this.name, data);
-    return { modifiedCount };
-  }
-
-  deleteOne(filter) {
-    const data = readCollection(this.name);
-    const index = data.findIndex((item) => matchesFilter(item, filter));
-    if (index === -1) return { deletedCount: 0 };
-    data.splice(index, 1);
-    writeCollection(this.name, data);
-    return { deletedCount: 1 };
-  }
-
-  deleteMany(filter) {
-    const data = readCollection(this.name);
-    const newData = data.filter((item) => !matchesFilter(item, filter));
-    const deletedCount = data.length - newData.length;
-    if (deletedCount > 0) writeCollection(this.name, newData);
-    return { deletedCount };
-  }
-
-  countDocuments(filter = {}) {
-    return this.find(filter).length;
-  }
+    
+    if (updateData.$push) {
+      Object.entries(updateData.$push).forEach(([key, value]) => {
+        if (!doc[key]) doc[key] = [];
+        if (Array.isArray(doc[key])) {
+          doc[key].push(value);
+        }
+      });
+    }
+    
+    if (updateData.$pull) {
+      Object.entries(updateData.$pull).forEach(([key, condition]) => {
+        if (Array.isArray(doc[key])) {
+          doc[key] = doc[key].filter(item => {
+            if (condition._id) return item._id !== condition._id;
+            return true;
+          });
+        }
+      });
+    }
+    
+    // Update timestamp
+    doc.updatedAt = new Date().toISOString();
+    modifiedCount++;
+    
+    if (options.upsert && modifiedCount === 1) {
+      // Only update first match for upsert
+      return;
+    }
+  });
+  
+  writeCollection(name, data);
+  
+  return {
+    modifiedCount,
+    matchedCount: matchingIndices.length
+  };
 }
 
-// Create collection instances
-const Users = new FileCollection('users');
-const Bookings = new FileCollection('bookings');
-const Messages = new FileCollection('messages');
-const Notifications = new FileCollection('notifications');
-const Meetings = new FileCollection('meetings');
+// Delete documents
+function remove(name, filters) {
+  let data = readCollection(name);
+  const initialLength = data.length;
+  
+  data = data.filter(doc => {
+    return !Object.entries(filters).every(([key, value]) => {
+      const keys = key.split('.');
+      let field = doc;
+      for (const k of keys) {
+        field = field?.[k];
+        if (field === undefined) return false;
+      }
+      return field === value;
+    });
+  });
+  
+  const deletedCount = initialLength - data.length;
+  
+  if (deletedCount > 0) {
+    writeCollection(name, data);
+  }
+  
+  return { deletedCount };
+}
 
+// Generate unique ID
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// Get next sequence value (for auto-increment)
+function getNextSequence(name) {
+  const counters = readCollection('counters');
+  const counter = counters.find(c => c._id === name);
+  
+  let nextValue = 1;
+  if (counter) {
+    nextValue = (counter.seq || 0) + 1;
+    update('counters', { _id: name }, { $set: { seq: nextValue, updatedAt: new Date().toISOString() } });
+  } else {
+    insert('counters', { _id: name, seq: nextValue });
+  }
+  
+  return nextValue;
+}
+
+// Export all functions
 module.exports = {
-  FileCollection,
-  Users,
-  Bookings,
-  Messages,
-  Notifications,
-  Meetings,
   readCollection,
   writeCollection,
-  getNextId,
+  query,
+  findOne,
+  insert,
+  update,
+  remove,
+  generateId,
+  getNextSequence,
   ensureDirectories,
-  createBackup
+  getCOLLECTIONS,
+  getDB_DIR,
+  getBACKUP_DIR
 };
