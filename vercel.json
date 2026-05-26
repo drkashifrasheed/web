@@ -24,6 +24,22 @@
       "dest": "backend/server.js"
     },
     {
+      "src": "/_next/(.*)",
+      "dest": "frontend/_next/$1"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "frontend/static/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "frontend/favicon.ico"
+    },
+    {
+      "src": "/favicon.svg",
+      "dest": "frontend/favicon.svg"
+    },
+    {
       "src": "/(.*)",
       "dest": "frontend"
     }
