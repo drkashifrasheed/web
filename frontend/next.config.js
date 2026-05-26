@@ -11,6 +11,8 @@ const nextConfig = {
     ],
   },
   trailingSlash: true,
+  // Disable static export - use SSR for all pages
+  output: 'standalone',
   async rewrites() {
     return {
       beforeFiles: [
