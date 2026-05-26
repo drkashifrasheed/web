@@ -84,17 +84,8 @@ require('./config/passport');
 // Profile images from persistent storage
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Serve frontend static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')));
-  
-  // Handle all other routes by serving the frontend
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'));
-    }
-  });
-}
+// Note: Frontend is served separately on Vercel
+// This backend only handles API routes
 
 // Database is always connected with file-based storage
 // No need to check connection status
@@ -136,57 +127,71 @@ app.use((req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+// For Vercel serverless - export handler
+if (process.env.VERCEL) {
+  // Initialize database for serverless
+  connectDB().then(dbConnected => {
+    if (dbConnected) {
+      console.log('Database connected for serverless');
+    }
+  });
 
-async function startServer() {
-  try {
-    const dbConnected = await connectDB();
+  // Export for Vercel serverless
+  module.exports = app;
+} else {
+  // Traditional server startup for local development
+  const PORT = process.env.PORT || 5000;
 
-    if (!dbConnected) {
-      console.error('❌ Database initialization failed. Server not started.');
+  async function startServer() {
+    try {
+      const dbConnected = await connectDB();
+
+      if (!dbConnected) {
+        console.error('❌ Database initialization failed. Server not started.');
+        process.exit(1);
+      }
+
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.error(`❌ Port ${PORT} is already in use. Stop the other process and try again.`);
+        } else {
+          console.error('Server error:', err.message);
+        }
+        process.exit(1);
+      });
+
+      server.listen(PORT, async () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`Uploads directory: ${UPLOADS_DIR}`);
+        console.log(
+          `Database: ${isDatabaseConnected() ? 'connected (data persists)' : 'offline'}`
+        );
+
+        console.log('\n📧 Checking email configuration...');
+        const emailConnected = await verifyConnection();
+        if (emailConnected) {
+          console.log('✅ Email service is ready\n');
+        } else {
+          console.log(
+            '⚠️  Email not configured. OTP emails will not be sent.\n'
+          );
+        }
+      });
+    } catch (error) {
+      console.error('Failed to start server:', error.message);
       process.exit(1);
     }
-
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use. Stop the other process and try again.`);
-      } else {
-        console.error('Server error:', err.message);
-      }
-      process.exit(1);
-    });
-
-    server.listen(PORT, async () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`Uploads directory: ${UPLOADS_DIR}`);
-      console.log(
-        `Database: ${isDatabaseConnected() ? 'connected (data persists)' : 'offline'}`
-      );
-
-      console.log('\n📧 Checking email configuration...');
-      const emailConnected = await verifyConnection();
-      if (emailConnected) {
-        console.log('✅ Email service is ready\n');
-      } else {
-        console.log(
-          '⚠️  Email not configured. OTP emails will not be sent.\n'
-        );
-      }
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error.message);
-    process.exit(1);
   }
+
+  startServer();
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err.message);
+    // Close server & exit process
+    server.close(() => process.exit(1));
+  });
+
+  module.exports = { app, server };
 }
-
-startServer();
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err.message);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
-
-module.exports = { app, server };
