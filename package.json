@@ -9,7 +9,7 @@
     "dev:backend": "cd backend && nodemon server.js",
     "build": "cd frontend && next build",
     "start": "node backend/server.js",
-    "vercel-build": "cd frontend && next build"
+    "vercel-build": "npm run build && npm run start"
   },
   "keywords": [
     "healthcare",
@@ -20,7 +20,7 @@
   "author": "Dr Mahar Kashif Rasheed",
   "license": "MIT",
   "engines": {
-    "node": "24.x"
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -35,26 +35,22 @@
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^7.0.7",
+    "nodemailer": "^6.9.8",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "socket.io": "^4.7.4",
     "uuid": "^9.0.1",
     "validator": "^13.11.0",
-
     "next": "14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-
     "typescript": "^5.3.3",
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",
     "@types/react-dom": "^18.2.18",
-
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.32",
     "autoprefixer": "^10.4.16",
-
     "framer-motion": "^10.16.16",
     "socket.io-client": "^4.7.4",
     "axios": "^1.6.3",
@@ -69,7 +65,7 @@
     "react-hot-toast": "^2.4.1",
     "simple-peer": "^9.11.1",
     "@types/simple-peer": "^9.11.8",
-    "next-auth": "^4.24.14",
+    "next-auth": "^4.24.5",
     "react-intersection-observer": "^9.5.3",
     "swiper": "^11.0.5",
     "react-calendar": "^4.7.0",
