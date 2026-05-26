@@ -1,0 +1,14 @@
+[
+  {
+    "recipient": null,
+    "sender": "1",
+    "type": "booking_created",
+    "title": "New Booking Request",
+    "message": "Test User has requested a new appointment",
+    "relatedBooking": "1",
+    "priority": "high",
+    "_id": "1",
+    "createdAt": "2026-05-24T17:47:37.231Z",
+    "updatedAt": "2026-05-24T17:47:37.231Z"
+  }
+]

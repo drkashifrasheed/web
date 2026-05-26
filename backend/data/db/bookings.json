@@ -1,0 +1,18 @@
+[
+  {
+    "patient": "1",
+    "patientInfo": {
+      "fullName": "Test User",
+      "age": 30,
+      "phoneNumber": "1234567890",
+      "location": "Test Location"
+    },
+    "medicalProblem": "Test Problem",
+    "appointmentType": "in-person",
+    "preferredTime": "Morning",
+    "status": "pending",
+    "_id": "1",
+    "createdAt": "2026-05-24T17:47:37.230Z",
+    "updatedAt": "2026-05-24T17:47:37.230Z"
+  }
+]
